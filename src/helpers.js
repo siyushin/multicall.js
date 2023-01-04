@@ -1,6 +1,8 @@
 import fetch from 'cross-fetch';
 import { defaultAbiCoder } from 'ethers/utils/abi-coder';
 import debug from 'debug';
+import { globalUtils } from "./globalUtils";
+
 const log = debug('multicall');
 
 // Function signature for: aggregate((address,bytes)[])
@@ -18,8 +20,47 @@ export function encodeParameter(type, val) {
   return encodeParameters([type], [val]);
 }
 
-export function encodeParameters(types, vals) {
-  return defaultAbiCoder.encode(types, vals);
+export function encodeParameters(types, vals, nonEthereum) {
+  if (nonEthereum === globalUtils.constant.TRON) {
+    if (vals.length == 0) {
+      return ""
+    }
+
+    const finalValues = [];
+    for (let i = 0; i < vals.length; i++) {
+      let type = types[i];
+      let value = vals[i];
+
+      if (type === 'address') {
+        value = value.replace("0x", "");
+        value = value.replace(globalUtils.constant.ADDRESS_PREFIX_REGEX, '0x');
+      } else if (type === 'address[]') {
+        value = value.map(v => {
+          return v.replace(globalUtils.constant.ADDRESS_PREFIX_REGEX, '0x');
+        });
+      } else {
+        value = value.map(item => {
+          return item.map(v => {
+            if (v.length === 44) {
+              return v.replace("0x", "").replace(globalUtils.constant.ADDRESS_PREFIX_REGEX, '0x');
+            } else {
+              return v;
+            }
+          });
+        });
+      }
+
+      finalValues.push(value);
+    }
+
+    try {
+      return defaultAbiCoder.encode(types, finalValues);
+    } catch (ex) {
+      console.error(ex);
+    }
+  } else {
+    return defaultAbiCoder.encode(types, vals);
+  }
 }
 
 export function decodeParameter(type, val) {
@@ -57,8 +98,9 @@ export function isEmpty(obj) {
   return !obj || Object.keys(obj).length === 0;
 }
 
-export async function ethCall(rawData, { id, web3, rpcUrl, block, multicallAddress, ws, wsResponseTimeout }) {
+export async function ethCall(rawData, { id, web3, rpcUrl, block, multicallAddress, ws, wsResponseTimeout, nonEthereum }) {
   const abiEncodedData = AGGREGATE_SELECTOR + strip0x(rawData);
+
   if (ws) {
     log('Sending via WebSocket');
     return new Promise((resolve, reject) => {
@@ -99,27 +141,30 @@ export async function ethCall(rawData, { id, web3, rpcUrl, block, multicallAddre
       data: abiEncodedData
     });
   } else {
-    log('Sending via XHR fetch');
-    const rawResponse = await fetch(rpcUrl, {
-      method: 'POST',
-      headers: {
-        'Accept': 'application/json',
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        jsonrpc: '2.0',
-        method: 'eth_call',
-        params: [
-          {
+    let rawResponse = null;
+    let content = null;
+    try {
+      rawResponse = await global.fetch(rpcUrl, {
+        method: 'POST',
+        headers: {
+          'Accept': 'application/json',
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          jsonrpc: '2.0',
+          method: 'eth_call',
+          params: [{
             to: multicallAddress,
             data: abiEncodedData
-          },
-          block || 'latest'
-        ],
-        id: 1
-      })
-    });
-    const content = await rawResponse.json();
+          }, block || 'latest'],
+          id: 1
+        })
+      });
+      content = await rawResponse.json();
+    } catch (error) {
+      console.error(error)
+    }
+
     if (!content || !content.result) {
       throw new Error('Multicall received an empty response. Check your call configuration for errors.');
     }

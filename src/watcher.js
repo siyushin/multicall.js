@@ -11,11 +11,11 @@ function isNewState(type, value, store) {
   return (
     store[type] === undefined ||
     (value !== null &&
-    store[type] !== null &&
-    typeof value === 'object' &&
-    typeof value.toString === 'function' &&
-    typeof store[type] === 'object' &&
-    typeof store[type].toString === 'function'
+      store[type] !== null &&
+      typeof value === 'object' &&
+      typeof value.toString === 'function' &&
+      typeof store[type] === 'object' &&
+      typeof store[type].toString === 'function'
       ? value.toString() !== store[type].toString()
       : value !== store[type])
   );
@@ -34,6 +34,7 @@ function prepareConfig(config) {
     if (addresses[config.preset] !== undefined) {
       config.multicallAddress = addresses[config.preset].multicall;
       config.rpcUrl = addresses[config.preset].rpcUrl;
+      config.nonEthereum = addresses[config.preset].nonEthereum;
     } else throw new Error(`Unknown preset ${config.preset}`);
   }
   return config;
@@ -135,7 +136,6 @@ export default function createWatcher(model, config) {
 
   function poll() {
     const interval = this.interval !== undefined ? this.interval : this.state.config.interval;
-    log('poll() called, %s%s', 'interval: ' + interval, this.retry ? ', retry: ' + this.retry : '');
     this.state.handler = setTimeout(async () => {
       try {
         if (!this.state.handler) return;
@@ -172,7 +172,7 @@ export default function createWatcher(model, config) {
           // Retry if blockNumber is lower than latestBlockNumber
           log(
             `Stale block returned, retrying in ${this.state.config.staleBlockRetryWait /
-              1000} seconds`
+            1000} seconds`
           );
           poll.call({
             state: this.state,
@@ -287,7 +287,6 @@ export default function createWatcher(model, config) {
       };
     },
     start() {
-      log('watcher.start() called');
       state.watching = true;
       if (!state.ws || state.ws.readyState === WebSocket.OPEN) {
         poll.call({

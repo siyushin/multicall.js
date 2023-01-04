@@ -18,5 +18,10 @@
   "xdai": {
     "multicall": "0xb5b692a88bdfc81ca69dcb1d924f59f0413a602a",
     "rpcUrl": "https://dai.poa.network"
+  },
+  "nile": {
+    "multicall": "0x4159448c06c22989ac5755fd2b26d1b0a33b01fea8",
+    "rpcUrl": "https://nile.trongrid.io/jsonrpc",
+    "nonEthereum": "tron"
   }
 }

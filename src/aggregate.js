@@ -2,20 +2,24 @@ import { id as keccak256 } from 'ethers/utils/hash';
 import invariant from 'invariant';
 import { strip0x, ethCall, encodeParameters, decodeParameters } from './helpers.js';
 import memoize from 'lodash/memoize';
+import { globalUtils } from './globalUtils.js';
 
 const INSIDE_EVERY_PARENTHESES = /\(.*?\)/g;
 const FIRST_CLOSING_PARENTHESES = /^[^)]*\)/;
 
-export function _makeMulticallData(calls) {
+export function _makeMulticallData(calls, _, nonEthereum) {
   const values = [
-    calls.map(({ target, method, args, returnTypes }) => [
-      target,
-      keccak256(method).substr(0, 10) +
+    calls.map(({ target, method, args, returnTypes }) => {
+      return [
+        target,
+        keccak256(method).substr(0, 10) +
         (args && args.length > 0
-          ? strip0x(encodeParameters(args.map(a => a[1]), args.map(a => a[0])))
+          ? strip0x(encodeParameters(args.map(a => a[1]), args.map(a => a[0]), nonEthereum))
           : '')
-    ])
+      ]
+    })
   ];
+
   const calldata = encodeParameters(
     [
       {
@@ -24,7 +28,8 @@ export function _makeMulticallData(calls) {
         type: 'tuple[]'
       }
     ],
-    values
+    values,
+    nonEthereum
   );
   return calldata;
 }
@@ -47,6 +52,7 @@ export default async function aggregate(calls, config) {
 
   calls = calls.map(({ call, target, returns }) => {
     if (!target) target = config.multicallAddress;
+
     const [method, ...argValues] = call;
     const [argTypesString, returnTypesString] = method
       .match(INSIDE_EVERY_PARENTHESES)
@@ -70,8 +76,9 @@ export default async function aggregate(calls, config) {
     };
   });
 
-  const callDataBytes = makeMulticallData(calls, false);
+  const callDataBytes = makeMulticallData(calls, false, config.nonEthereum);
   const outerResults = await ethCall(callDataBytes, config);
+
   const returnTypeArray = calls
     .map(({ returnTypes }) => returnTypes)
     .reduce((acc, ele) => acc.concat(ele), []);
