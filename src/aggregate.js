@@ -8,10 +8,18 @@ const INSIDE_EVERY_PARENTHESES = /\(.*?\)/g;
 const FIRST_CLOSING_PARENTHESES = /^[^)]*\)/;
 
 export function _makeMulticallData(calls, _, nonEthereum) {
+  const encodeTarget = (target, nonEthereum) => {
+    if (nonEthereum === globalUtils.constant.TRON) {
+      return target.replace("0x", "").replace(globalUtils.constant.ADDRESS_PREFIX_REGEX, '0x');
+    }
+
+    return target;
+  };
+
   const values = [
     calls.map(({ target, method, args, returnTypes }) => {
       return [
-        target,
+        encodeTarget(target, nonEthereum),
         keccak256(method).substr(0, 10) +
         (args && args.length > 0
           ? strip0x(encodeParameters(args.map(a => a[1]), args.map(a => a[0]), nonEthereum))
